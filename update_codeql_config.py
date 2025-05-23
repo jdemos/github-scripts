@@ -1,14 +1,12 @@
-#!/usr/bin/env python3
 # Python Script to change the configuration of a CodeQL Default setup
 # Steps below:
-# Retrieve configurationID for the code security configuration from UI OR
-#   - API Call: GET /orgs/{org}/code-security/configurations
+# Pass code security configuration ID as cli argument
 # Get repositories associated with a code security configuration
 #   - API Call: GET /rest/code-security/configurations/{configurationId}/repositories
+#   - Parameters: status=attached,enforced
 # Update the above list of repos to use the extended query suite:
 #   - API Call: PATCH /repos/{owner}/{repo}/code-scanning/default-setup { "query_suite": "extended" }
 
-import json
 import sys
 import os
 import requests
@@ -23,35 +21,24 @@ HEADERS = {
     "Accept": "application/vnd.github.v3+json"
 }
 
-# NOT NEEDED - Get security configurations for the organization
-def get_security_configurations(org):
-    url = f"{GITHUB_API_BASE_URL}/orgs/{org}/code-security/configurations"
 
-    response = requests.get(url, headers=HEADERS)
-    if response.status_code != 200:
-        print(f"Error retrieving security configurations: {response.status_code}")
-        print(response.text)
-        sys.exit(1)
-        
-    configurations = response.json()
-
-def get_associated_repositories(org, config_id):
-    # Get repositories associated with a code security configuration
+def get_associated_repos(org, config_id):
+    # Get repos associated with a code security configuration
     url = f"{GITHUB_API_BASE_URL}/orgs/{org}/code-security/configurations/{config_id}/repositories"
-    params = {"status": "attached"}
+    params = {"status": "attached,enforced"}
     response = requests.get(url, headers=HEADERS, params=params)
     if response.status_code != 200:
         print(f"Error retrieving associated repositories: {response.status_code}")
         print(response.text)
         sys.exit(1)
     
-    repositories = response.json()
+    repos = response.json()
     
-    print(f"Found {len(repositories)} repositories associated with the configuration.")
-    return repositories
+    print(f"Found {len(repos)} repositories associated with the configuration.")
+    return repos
 
 
-def update_repositories(org, repo_name):
+def update_repos(org, repo_name):
     # Update repo to use the extended query suite
     url = f"{GITHUB_API_BASE_URL}/repos/{org}/{repo_name}/code-scanning/default-setup"
     payload = {"query_suite": "extended"}
@@ -66,23 +53,24 @@ def update_repositories(org, repo_name):
 
     return response.text
 
+# Main function to orchestrate the CodeQL configuration update.
 def main():
-    # Main function to orchestrate the CodeQL configuration update.
+    # Assign value to org variable from constant
     org = GITHUB_ORG
+    # Check if config_id was provided as a command line argument
     if sys.argv[1]:
         config_id = sys.argv[1]
     else:
         print("Please provide the configuration ID as the command line argument.")
         sys.exit(1)
-    
-    #  Get associated repositories
-    repositories = get_associated_repositories(org, config_id)
+    #  Get associated repos
+    repos = get_associated_repos(org, config_id)
 
     # For each repo update security config to use extended query suite
-    for repo in repositories:
+    for repo in repos:
         repo_name = repo["repository"]["name"]
         print(f"Processing repository: {repo_name}")
-        update_status = update_repositories(org, repo_name)
+        update_status = update_repos(org, repo_name)
         print(update_status)
 
     print("Process completed.")
